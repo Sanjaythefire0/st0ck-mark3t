@@ -56,11 +56,13 @@ def detect_manipulation(stock_data):
 
 def adjust_for_risk(average_return, volatility, risk_level):
     if risk_level == 'low':
-        return average_return * 0.8, volatility * 0.8
+        adjusted_return = average_return * 0.9  
     elif risk_level == 'medium':
-        return average_return, volatility
-    else:  # High risk
-        return average_return * 1.2, volatility * 1.2
+        adjusted_return = average_return  
+    else:  
+        adjusted_return = average_return * 1.1  
+
+    return adjusted_return, volatility
 
 def suggest_investment(average_return, volatility, risk_level):
     if risk_level == 'low' and average_return > 0 and volatility < 0.02:
@@ -73,8 +75,14 @@ def suggest_investment(average_return, volatility, risk_level):
         return "❌ High Risk - Avoid"
 
 def calculate_suggested_stocks(budget, current_price, risk_level):
-    risk_factor = {"low": 0.1, "medium": 0.25, "high": 0.5}
-    investable_amount = budget * risk_factor[risk_level]
+    if risk_level == 'low':
+        risk_factor = 0.1  
+    elif risk_level == 'medium':
+        risk_factor = 0.25  
+    else:  
+        risk_factor = 0.5  
+
+    investable_amount = budget * risk_factor  
     return int(investable_amount // current_price)
 
 def generate_stock_graph(stock_data):

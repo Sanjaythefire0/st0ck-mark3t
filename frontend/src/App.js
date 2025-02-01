@@ -1,11 +1,12 @@
 import React, { useState } from "react";
+import './App.css';
 
 export default function App() {
   const [ticker, setTicker] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [riskLevel, setRiskLevel] = useState("medium");
-  const [budget, setBudget] = useState("");  // New state for budget
+  const [budget, setBudget] = useState("");  // Budget field for input
   const [recommendation, setRecommendation] = useState(null);
   const [error, setError] = useState("");
 
@@ -22,16 +23,16 @@ export default function App() {
           start_date: startDate,
           end_date: endDate,
           risk_level: riskLevel,
-          budget: parseFloat(budget),  // Ensure budget is sent as a float
+          budget: parseFloat(budget),  // Convert budget to number
         }),
       });
-  
+
       if (!response.ok) {
         throw new Error(`Error: ${response.statusText}`);
       }
-  
+
       const data = await response.json();
-  
+
       if (data && data.ticker) {
         setRecommendation(data);
       } else {
@@ -47,68 +48,87 @@ export default function App() {
 
   return (
     <div className="container">
-      <h1>Stock Recommendation System</h1>
+      <h1>Stock Recommendation System 📈</h1>
       <div className="form">
+        {/* Input fields stacked vertically */}
         <input
           type="text"
-          placeholder="Ticker (e.g., TSLA)"
+          placeholder="Ticker (e.g., TSLA) 📊"
           value={ticker}
           onChange={(e) => setTicker(e.target.value)}
         />
+        
+        <input
+          type="text"
+          placeholder="Enter your Budget (e.g., 10000) 💵"
+          value={budget}
+          onChange={(e) => setBudget(e.target.value)}
+        />
+
+        {/* Date inputs with smoother UI */}
         <input
           type="date"
           value={startDate}
           onChange={(e) => setStartDate(e.target.value)}
+          className="date-input"
         />
+        
         <input
           type="date"
           value={endDate}
           onChange={(e) => setEndDate(e.target.value)}
+          className="date-input"
         />
+
         <select
           value={riskLevel}
           onChange={(e) => setRiskLevel(e.target.value)}
         >
-          <option value="low">Low</option>
-          <option value="medium">Medium</option>
-          <option value="high">High</option>
+          <option value="low">Low Risk 😌</option>
+          <option value="medium">Medium Risk ⚖️</option>
+          <option value="high">High Risk ⚡</option>
         </select>
-        <input
-          type="number"
-          placeholder="Budget"
-          value={budget}
-          onChange={(e) => setBudget(e.target.value)}
-        />
-        <button onClick={handleSubmit}>Get Recommendation</button>
+        
+        <button onClick={handleSubmit}>Get Recommendation 🚀</button>
       </div>
 
       {error && <div className="error">{error}</div>}
 
       {recommendation && (
         <div className="result">
-          <h3>Recommendation for {recommendation.ticker}</h3>
-          <p>Average Return: {(recommendation.average_return * 100).toFixed(2)}%</p>
-          <p>Volatility: {(recommendation.volatility * 100).toFixed(2)}%</p>
+          <h3>Recommendation for {recommendation.ticker} 📊</h3>
+          <p>Average Return: {(recommendation.average_return * 100).toFixed(2)}% 📈</p>
+          <p>Volatility: {(recommendation.volatility * 100).toFixed(2)}% 🌪️</p>
           <p>
             {recommendation.manipulated
               ? "⚠️ Potential Manipulation Detected"
               : "✅ No Manipulation Detected"}
           </p>
-          <p>Suggested number of stocks to invest: {recommendation.suggested_stocks}</p>
+          
+          {/* Investment suggestion */}
+          <p>{recommendation.investment_suggestion}</p>
 
-          {/* Displaying the stock graph */}
+          {/* Suggested amount of stocks to buy */}
+          {recommendation.suggested_stocks && (
+            <p>Recommended Amount of Stocks: {recommendation.suggested_stocks} 📦</p>
+          )}
+          
+          {/* Graph for stock price over time */}
           {recommendation.stock_graph && (
-            <img
-              src={`data:image/png;base64,${recommendation.stock_graph}`}
-              alt="Stock Price Graph"
-              style={{ width: "100%", height: "auto", marginTop: "20px" }}
-            />
+            <div className="stock-graph">
+              <img
+                src={`data:image/png;base64,${recommendation.stock_graph}`}
+                alt="Stock Price Graph"
+              />
+            </div>
           )}
         </div>
       )}
     </div>
   );
 }
+
+
 
 
 
