@@ -10,26 +10,40 @@ export default function App() {
 
   const handleSubmit = async () => {
     setError("");
-    const response = await fetch("http://localhost:8000/recommend", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        ticker,
-        start_date: startDate,
-        end_date: endDate,
-        risk_level: riskLevel,
-      }),
-    });
-    const data = await response.json();
-    if (data.error) {
-      setError(data.error);
+    try {
+      const response = await fetch("http://localhost:8000/recommend", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          ticker,
+          start_date: startDate,
+          end_date: endDate,
+          risk_level: riskLevel,
+        }),
+      });
+  
+      if (!response.ok) {
+        // If the response is not 2xx, throw an error
+        throw new Error(`Error: ${response.statusText}`);
+      }
+  
+      const data = await response.json();
+  
+      if (data && data.ticker) {
+        setRecommendation(data);
+      } else {
+        setError("Invalid response from server");
+        setRecommendation(null);
+      }
+    } catch (error) {
+      console.error("Error during fetch:", error);
+      setError(error.message);
       setRecommendation(null);
-    } else {
-      setRecommendation(data);
     }
   };
+  
 
   return (
     <div className="container">
