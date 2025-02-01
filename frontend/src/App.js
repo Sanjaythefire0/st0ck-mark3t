@@ -5,7 +5,7 @@ export default function App() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [riskLevel, setRiskLevel] = useState("medium");
-  const [budget, setBudget] = useState("");  // Added state for budget
+  const [budget, setBudget] = useState("");  // New state for budget
   const [recommendation, setRecommendation] = useState(null);
   const [error, setError] = useState("");
 
@@ -22,16 +22,16 @@ export default function App() {
           start_date: startDate,
           end_date: endDate,
           risk_level: riskLevel,
-          budget: parseFloat(budget), // Ensure budget is sent as a float
+          budget: parseFloat(budget),  // Ensure budget is sent as a float
         }),
       });
-
+  
       if (!response.ok) {
         throw new Error(`Error: ${response.statusText}`);
       }
-
+  
       const data = await response.json();
-
+  
       if (data && data.ticker) {
         setRecommendation(data);
       } else {
@@ -75,7 +75,7 @@ export default function App() {
         </select>
         <input
           type="number"
-          placeholder="Budget (e.g., 5000)"
+          placeholder="Budget"
           value={budget}
           onChange={(e) => setBudget(e.target.value)}
         />
@@ -94,10 +94,21 @@ export default function App() {
               ? "⚠️ Potential Manipulation Detected"
               : "✅ No Manipulation Detected"}
           </p>
-          <p>Suggested number of stocks: {recommendation.suggested_stocks}</p>
+          <p>Suggested number of stocks to invest: {recommendation.suggested_stocks}</p>
+
+          {/* Displaying the stock graph */}
+          {recommendation.stock_graph && (
+            <img
+              src={`data:image/png;base64,${recommendation.stock_graph}`}
+              alt="Stock Price Graph"
+              style={{ width: "100%", height: "auto", marginTop: "20px" }}
+            />
+          )}
         </div>
       )}
     </div>
   );
 }
+
+
 

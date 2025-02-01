@@ -1,10 +1,13 @@
 import yfinance as yf
 import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from io import BytesIO
+import base64
 from fastapi import FastAPI
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List
-import numpy as np
 
 app = FastAPI()
 
@@ -30,31 +33,26 @@ class StockRecommendation(BaseModel):
     manipulated: bool
     investment_suggestion: str
     suggested_stocks: int  # Number of stocks suggested
-    price_data: List[dict]  # Add price_data field for returning stock data
+    stock_graph: str  # base64 encoded image of the stock graph
 
 def detect_manipulation(stock_data):
     try:
-        # Rolling window for volume and price change analysis (e.g., 20 days)
         window = 20
         stock_data['Volume Rolling Mean'] = stock_data['Volume'].rolling(window).mean()
         stock_data['Volume Rolling Std'] = stock_data['Volume'].rolling(window).std()
         
-        # Calculate Z-score for daily price change
         stock_data['Price Change'] = stock_data['Close'].pct_change().fillna(0)
         stock_data['Price Change Z-score'] = (stock_data['Price Change'] - stock_data['Price Change'].mean()) / stock_data['Price Change'].std()
         
-        # Identify high volume spikes and unusual price movements
         abnormal_volume = stock_data['Volume'] > (stock_data['Volume Rolling Mean'] + 2 * stock_data['Volume Rolling Std'])
-        abnormal_price_change = np.abs(stock_data['Price Change Z-score']) > 2  # Z-score threshold for abnormal price movement
+        abnormal_price_change = np.abs(stock_data['Price Change Z-score']) > 2
         
-        # Flag manipulation if both conditions are true
         manipulation_detected = (abnormal_volume & abnormal_price_change).any()
         
         return manipulation_detected
     except Exception as e:
         print("Error in manipulation detection:", e)
         return False
-
 
 def adjust_for_risk(average_return, volatility, risk_level):
     if risk_level == 'low':
@@ -78,6 +76,26 @@ def calculate_suggested_stocks(budget, current_price, risk_level):
     risk_factor = {"low": 0.1, "medium": 0.25, "high": 0.5}
     investable_amount = budget * risk_factor[risk_level]
     return int(investable_amount // current_price)
+
+def generate_stock_graph(stock_data):
+    plt.figure(figsize=(10, 6))
+    plt.plot(stock_data.index, stock_data['Close'], label="Close Price", color="b")
+    plt.title('Stock Price Over Time')
+    plt.xlabel('Date')
+    plt.ylabel('Price (USD)')
+    plt.xticks(rotation=45)
+    plt.grid(True)
+    plt.tight_layout()
+
+    # Save the plot to a BytesIO object
+    img_bytes = BytesIO()
+    plt.savefig(img_bytes, format="png")
+    img_bytes.seek(0)
+    
+    # Convert the image to base64 to return as JSON
+    img_base64 = base64.b64encode(img_bytes.getvalue()).decode('utf-8')
+    plt.close()
+    return img_base64
 
 @app.post("/recommend")
 def recommend_stock(request: StockRequest):
@@ -103,8 +121,7 @@ def recommend_stock(request: StockRequest):
         current_price = stock_data['Close'].iloc[-1]
         suggested_stocks = calculate_suggested_stocks(request.budget, current_price, request.risk_level)
 
-        # Prepare price data (last 10 entries of 'Close', 'Volume', 'Daily Return')
-        price_data = stock_data[['Close', 'Volume', 'Daily Return']].tail(10).to_dict(orient="records")
+        stock_graph_base64 = generate_stock_graph(stock_data)
 
         return StockRecommendation(
             ticker=request.ticker,
@@ -113,7 +130,7 @@ def recommend_stock(request: StockRequest):
             manipulated=manipulated,
             investment_suggestion=investment_suggestion,
             suggested_stocks=suggested_stocks,
-            price_data=price_data  # Include price data in the response
+            stock_graph=stock_graph_base64  # Include the graph as base64 in the response
         )
     except Exception as e:
         print("Error:", e)  # Log the exact error in the console
