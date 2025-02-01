@@ -26,6 +26,10 @@ This system uses **real-time stock data** to suggest which stocks to buy, how ma
 
 ---
 
+[![Watch Demo](assets/videos/demo.mp4)](assets/videos/demo.mp4)
+
+---
+
 ## 📲 How to Use
 
 ### 1. Install Dependencies
