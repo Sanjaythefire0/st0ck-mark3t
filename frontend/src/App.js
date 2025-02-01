@@ -5,6 +5,7 @@ export default function App() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [riskLevel, setRiskLevel] = useState("medium");
+  const [budget, setBudget] = useState("");  // Added state for budget
   const [recommendation, setRecommendation] = useState(null);
   const [error, setError] = useState("");
 
@@ -21,16 +22,16 @@ export default function App() {
           start_date: startDate,
           end_date: endDate,
           risk_level: riskLevel,
+          budget: parseFloat(budget), // Ensure budget is sent as a float
         }),
       });
-  
+
       if (!response.ok) {
-        // If the response is not 2xx, throw an error
         throw new Error(`Error: ${response.statusText}`);
       }
-  
+
       const data = await response.json();
-  
+
       if (data && data.ticker) {
         setRecommendation(data);
       } else {
@@ -43,7 +44,6 @@ export default function App() {
       setRecommendation(null);
     }
   };
-  
 
   return (
     <div className="container">
@@ -73,6 +73,12 @@ export default function App() {
           <option value="medium">Medium</option>
           <option value="high">High</option>
         </select>
+        <input
+          type="number"
+          placeholder="Budget (e.g., 5000)"
+          value={budget}
+          onChange={(e) => setBudget(e.target.value)}
+        />
         <button onClick={handleSubmit}>Get Recommendation</button>
       </div>
 
@@ -88,8 +94,10 @@ export default function App() {
               ? "⚠️ Potential Manipulation Detected"
               : "✅ No Manipulation Detected"}
           </p>
+          <p>Suggested number of stocks: {recommendation.suggested_stocks}</p>
         </div>
       )}
     </div>
   );
 }
+

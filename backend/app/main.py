@@ -1,119 +1,124 @@
 import yfinance as yf
 import pandas as pd
-import numpy as np
 from fastapi import FastAPI
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
+from typing import List
+import numpy as np
 
 app = FastAPI()
 
-# Add CORSMiddleware to handle requests from the frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for now, or specify your frontend URL
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],  # Allow all methods (GET, POST)
-    allow_headers=["*"],  # Allow all headers
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-# Define the input data model that the frontend will send
 class StockRequest(BaseModel):
     ticker: str
     start_date: str
     end_date: str
     risk_level: str
+    budget: float  # budget field
 
-# Define the response model
 class StockRecommendation(BaseModel):
     ticker: str
     average_return: float
     volatility: float
     manipulated: bool
+    investment_suggestion: str
+    suggested_stocks: int  # Number of stocks suggested
+    price_data: List[dict]  # Add price_data field for returning stock data
 
-# Function to fetch stock data and calculate metrics
-def get_stock_recommendation(ticker: str, start_date: str, end_date: str, risk_level: str):
+def detect_manipulation(stock_data):
     try:
-        # Fetch historical stock data using yfinance
-        stock_data = yf.download(ticker, start=start_date, end=end_date)
+        # Rolling window for volume and price change analysis (e.g., 20 days)
+        window = 20
+        stock_data['Volume Rolling Mean'] = stock_data['Volume'].rolling(window).mean()
+        stock_data['Volume Rolling Std'] = stock_data['Volume'].rolling(window).std()
+        
+        # Calculate Z-score for daily price change
+        stock_data['Price Change'] = stock_data['Close'].pct_change().fillna(0)
+        stock_data['Price Change Z-score'] = (stock_data['Price Change'] - stock_data['Price Change'].mean()) / stock_data['Price Change'].std()
+        
+        # Identify high volume spikes and unusual price movements
+        abnormal_volume = stock_data['Volume'] > (stock_data['Volume Rolling Mean'] + 2 * stock_data['Volume Rolling Std'])
+        abnormal_price_change = np.abs(stock_data['Price Change Z-score']) > 2  # Z-score threshold for abnormal price movement
+        
+        # Flag manipulation if both conditions are true
+        manipulation_detected = (abnormal_volume & abnormal_price_change).any()
+        
+        return manipulation_detected
+    except Exception as e:
+        print("Error in manipulation detection:", e)
+        return False
 
-        # Log stock data for debugging
-        print(f"Stock Data for {ticker} from {start_date} to {end_date}:")
-        print(stock_data.head())  # Inspect first few rows for sanity check
 
-        # Use 'Close' instead of 'Adj Close'
-        stock_data['Close'] = stock_data['Close']  # This should already exist
+def adjust_for_risk(average_return, volatility, risk_level):
+    if risk_level == 'low':
+        return average_return * 0.8, volatility * 0.8
+    elif risk_level == 'medium':
+        return average_return, volatility
+    else:  # High risk
+        return average_return * 1.2, volatility * 1.2
 
-        # Ensure there's enough data
-        if len(stock_data) < 2:
-            raise ValueError("Insufficient data for analysis")
+def suggest_investment(average_return, volatility, risk_level):
+    if risk_level == 'low' and average_return > 0 and volatility < 0.02:
+        return "✅ Low Risk - Invest"
+    elif risk_level == 'medium' and average_return > 0:
+        return "⚠️ Moderate Risk - Consider"
+    elif risk_level == 'high' and average_return > -0.02:
+        return "⚡ High Risk - Speculative"
+    else:
+        return "❌ High Risk - Avoid"
 
-        # Calculate daily returns on 'Close'
-        stock_data['Daily Return'] = stock_data['Close'].pct_change()
+def calculate_suggested_stocks(budget, current_price, risk_level):
+    risk_factor = {"low": 0.1, "medium": 0.25, "high": 0.5}
+    investable_amount = budget * risk_factor[risk_level]
+    return int(investable_amount // current_price)
 
-        # Check if Daily Return column exists
-        if 'Daily Return' not in stock_data.columns:
-            raise ValueError("Daily Return calculation failed.")
+@app.post("/recommend")
+def recommend_stock(request: StockRequest):
+    try:
+        if not request.ticker:
+            raise ValueError("Ticker cannot be empty.")
+        if request.start_date >= request.end_date:
+            raise ValueError("Start date must be before end date.")
 
-        # Handle NaN values in daily returns
-        stock_data['Daily Return'] = stock_data['Daily Return'].fillna(0)
+        stock_data = yf.download(request.ticker, start=request.start_date, end=request.end_date)
 
-        # Log the first 10 daily returns to confirm calculation
-        print(f"First 10 Daily Returns: {stock_data['Daily Return'].head(10)}")
+        if stock_data.empty:
+            raise ValueError("No data found for the provided ticker and date range.")
 
-        # Calculate average return and volatility
+        stock_data['Daily Return'] = stock_data['Close'].pct_change().fillna(0)
         average_return = stock_data['Daily Return'].mean()
         volatility = stock_data['Daily Return'].std()
 
-        # Log calculated average return and volatility
-        print(f"Calculated Average Return: {average_return}, Volatility: {volatility}")
+        manipulated = detect_manipulation(stock_data)
+        adjusted_return, adjusted_volatility = adjust_for_risk(average_return, volatility, request.risk_level)
+        investment_suggestion = suggest_investment(adjusted_return, adjusted_volatility, request.risk_level)
 
-        # Replace NaN with 0.0
-        average_return = 0.0 if pd.isna(average_return) else average_return
-        volatility = 0.0 if pd.isna(volatility) else volatility
+        current_price = stock_data['Close'].iloc[-1]
+        suggested_stocks = calculate_suggested_stocks(request.budget, current_price, request.risk_level)
 
-        # Adjust risk level based on user selection (reintroduce adjustments)
-        if risk_level == 'low':
-            average_return *= 0.8
-            volatility *= 0.5
-        elif risk_level == 'high':
-            average_return *= 1.2
-            volatility *= 1.5
-
-        # Convert to percentage for display
-        average_return_percentage = average_return * 100
-        volatility_percentage = volatility * 100
+        # Prepare price data (last 10 entries of 'Close', 'Volume', 'Daily Return')
+        price_data = stock_data[['Close', 'Volume', 'Daily Return']].tail(10).to_dict(orient="records")
 
         return StockRecommendation(
-            ticker=ticker,
-            average_return=average_return_percentage,
-            volatility=volatility_percentage,
-            manipulated=detect_manipulation(stock_data)
+            ticker=request.ticker,
+            average_return=adjusted_return,
+            volatility=adjusted_volatility,
+            manipulated=manipulated,
+            investment_suggestion=investment_suggestion,
+            suggested_stocks=suggested_stocks,
+            price_data=price_data  # Include price data in the response
         )
-
     except Exception as e:
-        print(f"Error: {str(e)}")
-        return {"error": str(e)}
+        print("Error:", e)  # Log the exact error in the console
+        return {"error": f"Error fetching recommendation: {str(e)}"}
 
-# Manipulation detection logic
-def detect_manipulation(stock_data: pd.DataFrame) -> bool:
-    volume_anomaly = False
-    stock_data['Volume Anomaly'] = stock_data['Volume'] > (stock_data['Volume'].rolling(window=20).mean() * 2)
-    if stock_data['Volume Anomaly'].sum() > len(stock_data) * 0.1:
-        volume_anomaly = True
-
-    price_spike = False
-    stock_data['Price Spike'] = stock_data['Close'].pct_change().abs() > 0.1
-    if stock_data['Price Spike'].sum() > len(stock_data) * 0.05:
-        price_spike = True
-
-    return volume_anomaly or price_spike
-
-@app.post("/recommend", response_model=StockRecommendation)
-def recommend_stock(request: StockRequest):
-    result = get_stock_recommendation(request.ticker, request.start_date, request.end_date, request.risk_level)
-    if isinstance(result, dict) and "error" in result:
-        return {"ticker": request.ticker, "average_return": 0.0, "volatility": 0.0, "manipulated": False}
-    return result
 
 
 
